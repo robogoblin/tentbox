@@ -1,0 +1,5 @@
+quart
+hypercorn
+adafruit-circuitpython-dht
+adafruit-blinka
+RPi.GPIO

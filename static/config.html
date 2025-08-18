@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+  <html lang="en" xml:lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Tent management Configuration</title>
+      <link rel="stylesheet" href="./styles.css" type="text/css">
+    </head>
+    <body>
+      <div class="container">
+        <h1>⚙️ Sensor Configuration</h1>
+
+        <form id="configForm">
+          <div class="form-group">
+            <label for="tempName">🌡️ Temperature Sensor Name:</label>
+            <input type="text" id="tempName" name="tempName" placeholder="Enter temperature sensor name" maxlength="30">
+          </div>
+          <div class="form-group">
+            <label for="humidName">💧 Humidity Sensor Name:</label>
+            <input type="text" id="humidName" name="humidName" placeholder="Enter humidity sensor name" maxlength="30">
+          </div>
+          <div class="form-group">
+            <label for="relayNames">🔌 Relay Names and Defaults:</label>
+              <div style="margin-left: 10px;">
+              <div>Relay 1: <input type="text" id="relayName0" maxlength="20" style="width:120px;"> &nbsp; Default: <span class="switch-label">Off</span><label class="switch"><input type="checkbox" id="relayDef0"><span class="slider"></span></label><span class="switch-label">On</span></div>
+              <div>Relay 2: <input type="text" id="relayName1" maxlength="20" style="width:120px;"> &nbsp; Default: <span class="switch-label">Off</span><label class="switch"><input type="checkbox" id="relayDef1"><span class="slider"></span></label><span class="switch-label">On</span></div>
+              <div>Relay 3: <input type="text" id="relayName2" maxlength="20" style="width:120px;"> &nbsp; Default: <span class="switch-label">Off</span><label class="switch"><input type="checkbox" id="relayDef2"><span class="slider"></span></label><span class="switch-label">On</span></div>
+              <div>Relay 4: <input type="text" id="relayName3" maxlength="20" style="width:120px;"> &nbsp; Default: <span class="switch-label">Off</span><label class="switch"><input type="checkbox" id="relayDef3"><span class="slider"></span></label><span class="switch-label">On</span></div>
+            </div>
+          </div>
+          <div style="text-align: center;">
+            <button type="submit" class="button">💾 Save Configuration</button>
+            <button type="button" class="button secondary" onclick="loadCurrentNames()">🔄 Load Current</button>
+          </div>
+        </form>
+
+        <div id="message" class="message"></div>
+
+        <div class="nav-link">
+          <a href="./index.html">← Back to Dashboard</a>
+        </div>
+
+        <div style="text-align: center; margin-top: 15px; opacity: 0.6; font-size: 0.9em;">
+          ESP Grow Tent Monitor: Alpha
+        </div>
+      </div>
+
+      <script>
+        // Load current sensor names and relay config
+        function loadCurrentNames() {
+          fetch('/api/sensors')
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById('tempName').value = data.temperatureName || '';
+            document.getElementById('humidName').value = data.humidityName || '';
+            for (let i = 0; i < 4; ++i) {
+              document.getElementById('relayName' + i).value = data.relayNames[i] || '';
+              document.getElementById('relayDef' + i).checked = data.relayDefaults[i];
+            }
+            showMessage('Current config loaded', 'success');
+          })
+          .catch(error => {
+            showMessage('Error loading current config', 'error');
+          });
+        }
+      // Save configuration
+      document.getElementById('configForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('tempName', document.getElementById('tempName').value);
+        formData.append('humidName', document.getElementById('humidName').value);
+        for (let i = 0; i < 4; ++i) {
+          formData.append('name' + i, document.getElementById('relayName' + i).value);
+          formData.append('default' + i, document.getElementById('relayDef' + i).checked ? 1 : 0);
+        }
+
+        fetch('/config', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Save relay config
+          fetch('/api/relay-config', {
+          method: 'POST',
+          body: formData
+          })
+          .then(() => {
+            if (data.success) {
+              showMessage('✅ Configuration saved successfully!', 'success');
+            } else {
+              showMessage('❌ Error saving configuration', 'error');
+            }
+          });
+        })
+        .catch(error => {
+          showMessage('❌ Network error', 'error');
+        });
+      });
+
+      // Show message
+      function showMessage(text, type) {
+        const messageDiv = document.getElementById('message');
+        messageDiv.textContent = text;
+        messageDiv.className = 'message ' + type;
+        messageDiv.style.display = 'block';
+
+        setTimeout(() => {
+          messageDiv.style.display = 'none';
+        }, 3000);
+      }
+
+      // Load current names on page load
+      loadCurrentNames();
+      </script>
+  </body>
+</html>
