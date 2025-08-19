@@ -31,11 +31,6 @@
                 <div id="air_temperature_3F" style="font-size: 1.2em; opacity: 0.8;">--°F</div>
             </div>
             <div class="sensor-card">
-                <div class="sensor-label">🌡️ Air Temperature 4</div>
-                <div id="air_temperature_4" class="sensor-value">--°C</div>
-                <div id="air_temperature_4F" style="font-size: 1.2em; opacity: 0.8;">--°F</div>
-            </div>
-            <div class="sensor-card">
                 <div class="sensor-label">💧 Air Humidity 1</div>
                 <div id="air_humidity_1" class="sensor-value">--%</div>
             </div>
@@ -48,16 +43,16 @@
                 <div id="air_humidity_3" class="sensor-value">--%</div>
             </div>
             <div class="sensor-card">
-                <div class="sensor-label">💧 Air Humidity 4</div>
-                <div id="air_humidity_4" class="sensor-value">--%</div>
-            </div>
-            <div class="sensor-card">
                 <div class="sensor-label">💧 Flood Sensor</div>
                 <div id="floodValue" class="sensor-value">--</div>
             </div>
             <div class="sensor-card">
-                <div class="sensor-label">💧 Water Level Sensor</div>
-                <div id="waterLevelValue" class="sensor-value">--</div>
+                <div class="sensor-label">💧 Water Temperature</div>
+                <div id="waterLevelValue1" class="sensor-value">--°C</div>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-label">💧 Water Temperature</div>
+                <div id="waterLevelValue2" class="sensor-value">--°C</div>
             </div>
         </div>
         <div class="sensor-card">
@@ -67,7 +62,7 @@
                     <div>
                         <span id="relayName1">Relay 1</span>: <span class="switch-label">Off</span>
                             <label class="switch" for="relaySw1">
-                                <input type="checkbox" id="relaySw1" onchange="setRelayState(0)">
+                                <input type="checkbox" id="relaySw1" onchange="setRelayState(1)">
                                 <span class="slider"></span>
                             </label>
                         <span class="switch-label">On</span>
@@ -75,7 +70,7 @@
                     <div>
                         <span id="relayName2">Relay 2</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw2">
-                            <input type="checkbox" id="relaySw2" onchange="setRelayState(1)">
+                            <input type="checkbox" id="relaySw2" onchange="setRelayState(2)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -83,7 +78,7 @@
                     <div>
                         <span id="relayName3">Relay 3</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw3">
-                            <input type="checkbox" id="relaySw3" onchange="setRelayState(2)">
+                            <input type="checkbox" id="relaySw3" onchange="setRelayState(3)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -91,7 +86,7 @@
                     <div>
                         <span id="relayName4">Relay 4</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw4">
-                            <input type="checkbox" id="relaySw4" onchange="setRelayState(3)">
+                            <input type="checkbox" id="relaySw4" onchange="setRelayState(4)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -99,7 +94,7 @@
                     <div>
                         <span id="relayName5">Relay 5</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw5">
-                            <input type="checkbox" id="relaySw5" onchange="setRelayState(4)">
+                            <input type="checkbox" id="relaySw5" onchange="setRelayState(5)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -107,7 +102,7 @@
                     <div>
                         <span id="relayName6">Relay 6</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw6">
-                            <input type="checkbox" id="relaySw6" onchange="setRelayState(5)">
+                            <input type="checkbox" id="relaySw6" onchange="setRelayState(6)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -115,7 +110,7 @@
                     <div>
                         <span id="relayName7">Relay 7</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw7">
-                            <input type="checkbox" id="relaySw7" onchange="setRelayState(6)">
+                            <input type="checkbox" id="relaySw7" onchange="setRelayState(7)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -123,7 +118,7 @@
                     <div>
                         <span id="relayName8">Relay 8</span>: <span class="switch-label">Off</span>
                         <label class="switch" for="relaySw8">
-                            <input type="checkbox" id="relaySw8" onchange="setRelayState(7)">
+                            <input type="checkbox" id="relaySw8" onchange="setRelayState(8)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -163,25 +158,19 @@
                 return (c * 9) / 5 + 32;
             }
 
-            function updateDht22(dht) {
-                // dht is an object with keys like "0", "1", ...
-                const keys = Object.keys(dht);
-
-                // Map up to 4 sensors into the pre-defined cards
-                for (let i = 0; i < 4; i++) {
-                    const idx = String(i); // JSON keys are strings
+            function updateDht22(dhtObj) {
+                const entries = Object.entries(dhtObj || {});
+                // populate up to 4 cards
+                for (let i = 0; i < 3; i++) {
                     const tempEl = document.getElementById('air_temperature_' + (i + 1));
                     const tempFEl = document.getElementById('air_temperature_' + (i + 1) + 'F');
                     const humidEl = document.getElementById('air_humidity_' + (i + 1));
-
-                    if (!tempEl || !humidEl) continue;
-
                     const cardTempLabel = tempEl.closest('.sensor-card').querySelector('.sensor-label');
                     const cardHumidLabel = humidEl.closest('.sensor-card').querySelector('.sensor-label');
 
-                    if (keys.includes(idx)) {
-                        const sensor = dht[idx];
-                        const name = sensor.name || `DHT22 Sensor ${idx}`;
+                    if (i < entries.length) {
+                        const [key, sensor] = entries[i];
+                        const name = sensor.name || `DHT22 ${key}`;
                         const t = sensor.temperature;
                         const h = sensor.humidity;
 
@@ -195,7 +184,7 @@
                         }
                         humidEl.textContent = (typeof h === 'number' && !isNaN(h)) ? `${h.toFixed(1)}%` : '--%';
                     } else {
-                        // No data for this slot
+                        // clear slot
                         if (cardTempLabel) cardTempLabel.textContent = `🌡️ Air Temperature ${i + 1}`;
                         if (cardHumidLabel) cardHumidLabel.textContent = `💧 Air Humidity ${i + 1}`;
                         tempEl.textContent = '--°C';
@@ -205,16 +194,44 @@
                 }
             }
 
+            function updateDs18b20(ds) {
+                const entries = Object.entries(ds || {});
+                if (entries.length > 0) {
+                    for (let i = 1; i <= 2; i++) {
+                        const el = document.getElementById('waterLevelValue' + i);
+                        if (!el) continue;
+                        console.log(`Updating water level sensor ${i} with ${JSON.stringify(entries[i])}`);
+                        if (i <= entries.length) {
+                            const [key, sensor] = entries[i-1];
+                            const t = sensor.temperature;
+                            const name = sensor.name || key;
+                            el.textContent = (typeof t === 'number' && !isNaN(t)) ? `${t.toFixed(2)}°C` : '--°C';
+                            const label = el.closest('.sensor-card').querySelector('.sensor-label');
+                            if (label) label.textContent = `💧 ${name}`;
+                        } else {
+                            el.textContent = '--°C';
+                            const label = el.closest('.sensor-card').querySelector('.sensor-label');
+                            if (label) label.textContent = '💧 Water Temperature';
+                        }
+                    }
+                }
+            }
+
             function updateRelaysIfPresent(data) {
-                if (!data || typeof data !== 'object') return;
-                const { relays, relayNames } = data;
-                if (!Array.isArray(relays) || !Array.isArray(relayNames)) return;
+                if (!data) return;
+                const relays = data.relays || {};
+                const relayNames = data.relayNames || {};
                 for (let i = 1; i <= 8; ++i) {
                     const sw = document.getElementById('relaySw' + i);
                     const nameEl = document.getElementById('relayName' + i);
                     if (!sw || !nameEl) continue;
-                    if (typeof relays[i] !== 'undefined') sw.checked = !!relays[i];
-                    if (typeof relayNames[i] !== 'undefined') nameEl.textContent = relayNames[i];
+                    // support object keyed by index (0-based or 1-based) or string keys
+                    const zeroKey = String(i - 1);
+                    const oneKey = String(i);
+                    const on = (zeroKey in relays) ? relays[zeroKey] : (oneKey in relays ? relays[oneKey] : relays[i]);
+                    sw.checked = !!on;
+                    const rn = (zeroKey in relayNames) ? relayNames[zeroKey] : (oneKey in relayNames ? relayNames[oneKey] : relayNames[i]);
+                    if (rn) nameEl.textContent = rn;
                 }
             }
 
@@ -224,11 +241,19 @@
                     .then(response => response.json())
                     .then(data => {
                         const dht = data && data.dht22 ? data.dht22 : null;
+                        const ds18b20 = data && data.ds18b20 ? data.ds18b20 : null;
                         if (dht && Object.keys(dht).length > 0) {
                             updateDht22(dht);
+                            updateDs18b20(ds18b20);
                             updateRelaysIfPresent(data);
                             setStatus(true, '✅ Sensor Online');
-                            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+
+                            // try to set last update from latest readable_time in payloads
+                            let times = [];
+                            Object.values(dht || {}).forEach(s => { if (s.readable_time) times.push(s.readable_time); });
+                            Object.values(ds18b20 || {}).forEach(s => { if (s.readable_time) times.push(s.readable_time); });
+                            const last = times.sort().reverse()[0];
+                            document.getElementById('lastUpdate').textContent = last || new Date().toLocaleTimeString();
                         } else {
                             setStatus(false, '❌ No DHT22 data');
                         }
@@ -243,18 +268,23 @@
             }
 
             function setRelayState(idx) {
-                let checked = document.getElementById('relaySw' + idx).checked ? 1 : 0;
+                // normalize: accept 1..8 (UI) or 0..7
+                let zeroIdx = (idx >= 1 && idx <= 8) ? (idx - 1) : idx;
+                const swId = 'relaySw' + (zeroIdx + 1);
+                const checked = document.getElementById(swId).checked ? 1 : 0;
                 let formData = new FormData();
-                formData.append('index', idx);
+                formData.append('index', zeroIdx);
                 formData.append('state', checked);
                 fetch('/api/relay', { method: 'POST', body: formData })
                     .then(() => updateSensorData());
             }
 
             function setRelayDefault(idx) {
-                let checked = document.getElementById('relayDef' + idx).checked ? 1 : 0;
+                let zeroIdx = (idx >= 1 && idx <= 8) ? (idx - 1) : idx;
+                const defId = 'relayDef' + (zeroIdx + 1);
+                const checked = document.getElementById(defId) ? (document.getElementById(defId).checked ? 1 : 0) : 0;
                 let formData = new FormData();
-                formData.append('index', idx);
+                formData.append('index', zeroIdx);
                 formData.append('default', checked);
                 fetch('/api/relay-default', { method: 'POST', body: formData })
                     .then(() => updateSensorData());

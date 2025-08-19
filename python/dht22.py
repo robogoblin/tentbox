@@ -6,6 +6,8 @@ import logging
 import microcontroller
 import os
 
+import RPi.GPIO as GPIO
+
 from datetime import datetime
 from time import time
 
@@ -88,14 +90,17 @@ class DHT22Manager:
         self.lock = lock
         self.sensors = {}
 
-    async def add_sensor(self, pins: list[microcontroller.Pin]):
-        for pin in pins:
-            sensor = DHT22Sensor(pin)
-            asyncio.create_task(sensor.start_reading())
-            self.sensors[f"{pin}"] = sensor
+    async def add_sensor(
+        self, pin: microcontroller.Pin, name: str = "", location: str = ""
+    ):
+        sensor = DHT22Sensor(pin, name)
+        sensor.set_location(location)
+        asyncio.create_task(sensor.start_reading())
+        self.sensors[f"{pin}"] = sensor
 
     async def read_sensors(self):
         while True:
+            logging.debug(f"Reading DHT22 sensors")
             output = {}
             for key, sensor in self.sensors.items():
                 data = await sensor.output()
@@ -125,7 +130,9 @@ if __name__ == "__main__":
 
         for sensor_config in sensors:
             # sensor = DHT22Sensor(sensor_config["pin"], sensor_config.get("name", ""))
-            await manager.add_sensor([sensor_config["pin"]])
+            await manager.add_sensor(
+                pin=sensor_config["pin"], name=sensor_config.get("name", "")
+            )
             asyncio.create_task(manager.read_sensors())
 
         while True:
