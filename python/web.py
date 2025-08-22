@@ -58,11 +58,11 @@ def create_app(
         try:
             data = await quart.request.get_json()
             relay_id = data.get("relay_id")
-            state = data.get("state").lower()
+            state = data.get("state")
             if relay_id is None or state is None:
                 logging.warning("Missing parameters on relay state set")
                 return ("bad request", 400)
-
+            state = state.lower()
             if state == "on":
                 usable_state = True
             elif state == "off":
