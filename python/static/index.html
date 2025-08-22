@@ -8,7 +8,7 @@
     </head>
     <body>
     <div class="container">
-        <h1>🌱 ESP Grow Tent Monitor</h1>
+        <h1>🌱 Berry Pi Grow Tent Monitor</h1>
         
         <div id="status" class="status offline">
             <span id="statusText">Connecting...</span>
@@ -48,11 +48,11 @@
             </div>
             <div class="sensor-card">
                 <div class="sensor-label">💧 Water Temperature</div>
-                <div id="waterLevelValue1" class="sensor-value">--°C</div>
+                <div id="waterTempValue1" class="sensor-value">--°C</div>
             </div>
             <div class="sensor-card">
                 <div class="sensor-label">💧 Water Temperature</div>
-                <div id="waterLevelValue2" class="sensor-value">--°C</div>
+                <div id="waterTempValue2" class="sensor-value">--°C</div>
             </div>
         </div>
         <div class="sensor-card">
@@ -60,65 +60,65 @@
                 <div class="sensor-label">🔌 Relays</div>
                 <div id="relays">
                     <div>
-                        <span id="relayName1">Relay 1</span>: <span class="switch-label">Off</span>
-                            <label class="switch" for="relaySw1">
-                                <input type="checkbox" id="relaySw1" onchange="setRelayState(1)">
+                        <span id="name_plug1">Plug 1</span>: <span class="switch-label">Off</span>
+                            <label class="switch" for="plug1">
+                                <input type="checkbox" id="plug1" onchange="setRelayState(1)">
                                 <span class="slider"></span>
                             </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName2">Relay 2</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw2">
-                            <input type="checkbox" id="relaySw2" onchange="setRelayState(2)">
+                        <span id="name_plug2">Plug 2</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug2">
+                            <input type="checkbox" id="plug2" onchange="setRelayState(2)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName3">Relay 3</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw3">
-                            <input type="checkbox" id="relaySw3" onchange="setRelayState(3)">
+                        <span id="name_plug3">Plug 3</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug3">
+                            <input type="checkbox" id="plug3" onchange="setRelayState(3)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName4">Relay 4</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw4">
-                            <input type="checkbox" id="relaySw4" onchange="setRelayState(4)">
+                        <span id="name_plug4">Plug 4</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug4">
+                            <input type="checkbox" id="plug4" onchange="setRelayState(4)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName5">Relay 5</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw5">
-                            <input type="checkbox" id="relaySw5" onchange="setRelayState(5)">
+                        <span id="name_plug5">Plug 5</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug5">
+                            <input type="checkbox" id="plug5" onchange="setRelayState(5)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName6">Relay 6</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw6">
-                            <input type="checkbox" id="relaySw6" onchange="setRelayState(6)">
+                        <span id="name_plug6">Plug 6</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug6">
+                            <input type="checkbox" id="plug6" onchange="setRelayState(6)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName7">Relay 7</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw7">
-                            <input type="checkbox" id="relaySw7" onchange="setRelayState(7)">
+                        <span id="name_plug7">Plug 7</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug7">
+                            <input type="checkbox" id="plug7" onchange="setRelayState(7)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
                     </div>
                     <div>
-                        <span id="relayName8">Relay 8</span>: <span class="switch-label">Off</span>
-                        <label class="switch" for="relaySw8">
-                            <input type="checkbox" id="relaySw8" onchange="setRelayState(8)">
+                        <span id="name_plug8">Plug 8</span>: <span class="switch-label">Off</span>
+                        <label class="switch" for="plug8">
+                            <input type="checkbox" id="plug8" onchange="setRelayState(8)">
                             <span class="slider"></span>
                         </label>
                         <span class="switch-label">On</span>
@@ -198,9 +198,9 @@
                 const entries = Object.entries(ds || {});
                 if (entries.length > 0) {
                     for (let i = 1; i <= 2; i++) {
-                        const el = document.getElementById('waterLevelValue' + i);
+                        const el = document.getElementById('waterTempValue' + i);
                         if (!el) continue;
-                        console.log(`Updating water level sensor ${i} with ${JSON.stringify(entries[i])}`);
+                        console.log(`Updating water temperature sensor ${i} with ${JSON.stringify(entries[i])}`);
                         if (i <= entries.length) {
                             const [key, sensor] = entries[i-1];
                             const t = sensor.temperature;
@@ -217,21 +217,13 @@
                 }
             }
 
-            function updateRelaysIfPresent(data) {
-                if (!data) return;
-                const relays = data.relays || {};
-                const relayNames = data.relayNames || {};
-                for (let i = 1; i <= 8; ++i) {
-                    const sw = document.getElementById('relaySw' + i);
-                    const nameEl = document.getElementById('relayName' + i);
+            function updateRelays(relays) {
+                for (const [id, state] of Object.entries(relays)) {
+                    const sw = document.getElementById(id);
+                    const nameEl = document.getElementById('name_' + id);
                     if (!sw || !nameEl) continue;
-                    // support object keyed by index (0-based or 1-based) or string keys
-                    const zeroKey = String(i - 1);
-                    const oneKey = String(i);
-                    const on = (zeroKey in relays) ? relays[zeroKey] : (oneKey in relays ? relays[oneKey] : relays[i]);
-                    sw.checked = !!on;
-                    const rn = (zeroKey in relayNames) ? relayNames[zeroKey] : (oneKey in relayNames ? relayNames[oneKey] : relayNames[i]);
-                    if (rn) nameEl.textContent = rn;
+                    sw.checked = state.state;
+                    nameEl.textContent = state.name;
                 }
             }
 
@@ -242,10 +234,11 @@
                     .then(data => {
                         const dht = data && data.dht22 ? data.dht22 : null;
                         const ds18b20 = data && data.ds18b20 ? data.ds18b20 : null;
+                        const relays = data && data.relays ? data.relays : null;
                         if (dht && Object.keys(dht).length > 0) {
                             updateDht22(dht);
                             updateDs18b20(ds18b20);
-                            updateRelaysIfPresent(data);
+                            updateRelays(relays);
                             setStatus(true, '✅ Sensor Online');
 
                             // try to set last update from latest readable_time in payloads
@@ -267,16 +260,16 @@
                     });
             }
 
-            function setRelayState(idx) {
-                // normalize: accept 1..8 (UI) or 0..7
-                let zeroIdx = (idx >= 1 && idx <= 8) ? (idx - 1) : idx;
-                const swId = 'relaySw' + (zeroIdx + 1);
-                const checked = document.getElementById(swId).checked ? 1 : 0;
-                let formData = new FormData();
-                formData.append('index', zeroIdx);
-                formData.append('state', checked);
-                fetch('/api/relay', { method: 'POST', body: formData })
-                    .then(() => updateSensorData());
+            async function setRelayState(idx) {
+                const swId = 'plug' + idx;
+                const checked = document.getElementById(swId).checked ? "on" : "off";
+                let formData = {
+                    'relay_id': swId,
+                    'state': checked
+                };
+                // hang on for a few moments while the cache of state updates.
+                
+                await fetch('/api/relay/state', { method: 'POST', body: JSON.stringify(formData), headers: { 'Content-Type': 'application/json' } });
             }
 
             function setRelayDefault(idx) {

@@ -1,5 +1,9 @@
 quart
+quart_schema
+pydantic
 hypercorn
 adafruit-circuitpython-dht
 adafruit-blinka
 RPi.GPIO
+w1thermsensor
+aiorwlock

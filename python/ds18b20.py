@@ -1,4 +1,5 @@
 import asyncio
+import aiorwlock
 import logging
 import os
 import json
@@ -7,7 +8,12 @@ from time import time
 
 # Optional hardware library for DS18B20 on Raspberry Pi
 try:
-    from w1thermsensor import W1ThermSensor, SensorNotReadyError, NoSensorFoundError
+    from w1thermsensor import (
+        AsyncW1ThermSensor,
+        SensorNotReadyError,
+        NoSensorFoundError,
+        Sensor,
+    )
 
     _W1_AVAILABLE = True
 except Exception:
@@ -37,15 +43,17 @@ class DS18B20Sensor:
         self.temperature = None
         self.timestamp = 0.0
         self.location = ""
-        self.lock = asyncio.Lock()
+        self.lock = aiorwlock.RWLock()
 
         if _W1_AVAILABLE:
             try:
                 if sensor_id:
-                    self._hw = W1ThermSensor(sensor_id=sensor_id)
+                    self._hw = AsyncW1ThermSensor(
+                        sensor_type=Sensor.DS18B20, sensor_id=sensor_id
+                    )
                 else:
                     # will raise NoSensorFoundError if none
-                    self._hw = W1ThermSensor()
+                    self._hw = AsyncW1ThermSensor()
             except Exception as e:
                 logging.warning("Failed to initialize W1 sensor %s: %s", sensor_id, e)
                 self._hw = None
@@ -53,7 +61,7 @@ class DS18B20Sensor:
             self._hw = None
 
     async def output(self) -> dict:
-        async with self.lock:
+        async with self.lock.reader_lock:
             return {
                 "name": self.name,
                 "location": self.location,
@@ -66,17 +74,20 @@ class DS18B20Sensor:
                 ),
             }
 
-    def load_config(self, given_config: dict):
-        if "name" in given_config:
-            self.name = given_config["name"]
-        if "location" in given_config:
-            self.location = given_config["location"]
+    async def load_config(self, given_config: dict):
+        async with self.lock.writer_lock:
+            if "name" in given_config:
+                self.name = given_config["name"]
+            if "location" in given_config:
+                self.location = given_config["location"]
 
-    def set_location(self, location: str):
-        self.location = location
+    async def set_location(self, location: str):
+        async with self.lock.writer_lock:
+            self.location = location
 
-    def set_name(self, name: str):
-        self.name = name
+    async def set_name(self, name: str):
+        async with self.lock.writer_lock:
+            self.name = name
 
     async def start_reading(self):
         """Start a perpetual read loop for this sensor. Call with create_task.
@@ -88,21 +99,11 @@ class DS18B20Sensor:
         while True:
             logging.debug("DS18B20 %s: attempting read", self.name)
             try:
-                if self._hw:
-                    # synchronous library call inside async coroutine - acceptable
-                    # because the driver is fast; if it blocks too long consider
-                    # running it in a thread executor.
-                    temp_c = self._hw.get_temperature()
-                else:
-                    # simulated value
-                    temp_c = 20.0 + (os.getpid() % 5) + (time() % 1)
-
-                async with self.lock:
+                temp_c = await self._hw.get_temperature()
+                async with self.lock.writer_lock:
                     self.temperature = temp_c
                     self.timestamp = time()
-
                 logging.debug("DS18B20 %s: read temperature=%.2f", self.name, temp_c)
-
             except (SensorNotReadyError, NoSensorFoundError) as e:
                 logging.debug("DS18B20 %s: sensor busy or not found: %s", self.name, e)
             except Exception as e:
@@ -121,7 +122,7 @@ class DS18B20Manager:
     other code holding a reference sees updates.
     """
 
-    def __init__(self, cache: dict, lock: asyncio.Lock, read_interval: int = 15):
+    def __init__(self, cache: dict, lock: aiorwlock.RWLock, read_interval: int = 15):
         self.cache = cache
         self.lock = lock
         self.read_interval = read_interval
@@ -144,7 +145,7 @@ class DS18B20Manager:
                 output[key] = data
                 logging.debug("Sensor %s data: %s", key, data)
 
-            async with self.lock:
+            async with self.lock.writer_lock:
                 self.cache.clear()
                 self.cache.update(output)
 
@@ -160,10 +161,11 @@ if __name__ == "__main__":
         logging.info("Starting DS18B20 manager demo")
 
         # Example sensors - on real Pi you could pass device ids. None will auto-discover.
-        sensors = ["28-000000b239d5", "28-000000b23b5a"]
+        sensors = ["000000b239d5", "000000b23b5a"]
+        # sensors = [None, None]
         cache = {}
-        lock = asyncio.Lock()
-        manager = DS18B20Manager(cache, lock)
+        cache_lock = aiorwlock.RWLock()
+        manager = DS18B20Manager(cache, cache_lock)
 
         await manager.add_sensor(sensors)
         # run aggregator in background

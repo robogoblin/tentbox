@@ -1,15 +1,15 @@
 import adafruit_dht
 import asyncio
+import aiorwlock
 import board
 import json
 import logging
-import microcontroller
 import os
-
-import RPi.GPIO as GPIO
-
 from datetime import datetime
 from time import time
+
+import board_index
+
 
 # TODO
 # Sensors need to be initialized with their pin and name.
@@ -17,19 +17,21 @@ from time import time
 
 
 class DHT22Sensor:
-    def __init__(self, pin: microcontroller.Pin, name: str = ""):
+    def __init__(self, pin: int, name: str = ""):
         self.pin = pin
-        self.sensor = adafruit_dht.DHT22(self.pin, use_pulseio=False)
+        self.sensor = adafruit_dht.DHT22(
+            board_index.get_pin(self.pin), use_pulseio=False
+        )
         self.name = "name" if name else f"dht22_{pin}"
         self.location = ""
         self.temperature = 0.0
         self.humidity = 0.0
         self.timestamp = 0.0
-        self.lock = asyncio.Lock()
+        self.lock = aiorwlock.RWLock()
 
     async def output(self) -> dict:
-        async with self.lock:
-            output = {
+        async with self.lock.reader_lock:
+            return {
                 "temperature": self.temperature,
                 "humidity": self.humidity,
                 "timestamp": self.timestamp,
@@ -38,19 +40,20 @@ class DHT22Sensor:
                 ),
             }
 
-        return output
+    async def load_config(self, given_config: dict):
+        async with self.lock.writer_lock:
+            if "name" in given_config:
+                self.name = given_config["name"]
+            if "location" in given_config:
+                self.location = given_config["location"]
 
-    def load_config(self, given_config: dict):
-        if "name" in given_config:
-            self.name = given_config["name"]
-        if "location" in given_config:
-            self.location = given_config["location"]
+    async def set_location(self, location: str):
+        async with self.lock.writer_lock:
+            self.location = location
 
-    def set_location(self, location: str):
-        self.location = location
-
-    def set_name(self, name: str):
-        self.name = name
+    async def set_name(self, name: str):
+        async with self.lock.writer_lock:
+            self.name = name
 
     async def start_reading(self):
         while True:
@@ -59,7 +62,7 @@ class DHT22Sensor:
                 temp_c = self.sensor.temperature
                 hum = self.sensor.humidity
                 if (temp_c is not None) and (hum is not None):
-                    async with self.lock:
+                    async with self.lock.writer_lock:
                         self.humidity = hum
                         self.temperature = temp_c
                         self.timestamp = time()
@@ -84,17 +87,15 @@ class DHT22Sensor:
 # Because of this we expect the caller to supply a dict that we can use to cache
 # data in.
 class DHT22Manager:
-    def __init__(self, cache, lock):
+    def __init__(self, cache: dict, cache_lock: aiorwlock.RWLock):
 
         self.cache = cache
-        self.lock = lock
+        self.cache_lock = cache_lock
         self.sensors = {}
 
-    async def add_sensor(
-        self, pin: microcontroller.Pin, name: str = "", location: str = ""
-    ):
+    async def add_sensor(self, pin: int, name: str = "", location: str = ""):
         sensor = DHT22Sensor(pin, name)
-        sensor.set_location(location)
+        await sensor.set_location(location)
         asyncio.create_task(sensor.start_reading())
         self.sensors[f"{pin}"] = sensor
 
@@ -102,12 +103,13 @@ class DHT22Manager:
         while True:
             logging.debug(f"Reading DHT22 sensors")
             output = {}
+
             for key, sensor in self.sensors.items():
                 data = await sensor.output()
                 output[key] = data
                 logging.debug(f"Sensor {key} data: {data}")
-            async with self.lock:
-                self.cache.clear()
+
+            async with self.cache_lock.writer_lock:
                 self.cache.update(output)
 
             await asyncio.sleep(15)
@@ -120,20 +122,20 @@ if __name__ == "__main__":
         logging.basicConfig(level=getattr(logging, log_level))
         logging.info("Starting... It takes a bit of time to get the first reading...")
         sensors = [
-            {"pin": board.D13, "name": "test1"},
-            {"pin": board.D19, "name": "test2"},
-            {"pin": board.D26, "name": "test3"},
+            {"pin": 13, "name": "test1"},
+            {"pin": 19, "name": "test2"},
+            {"pin": 26, "name": "test3"},
         ]
         cache = {}
-        lock = asyncio.Lock()
-        manager = DHT22Manager(cache, lock)
+        cache_lock = aiorwlock.RWLock()
+        manager = DHT22Manager(cache, cache_lock)
 
         for sensor_config in sensors:
-            # sensor = DHT22Sensor(sensor_config["pin"], sensor_config.get("name", ""))
             await manager.add_sensor(
                 pin=sensor_config["pin"], name=sensor_config.get("name", "")
             )
-            asyncio.create_task(manager.read_sensors())
+
+        asyncio.create_task(manager.read_sensors())
 
         while True:
             await asyncio.sleep(15)

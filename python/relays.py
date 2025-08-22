@@ -1,65 +1,11 @@
-"""Relay control helpers for optocoupler relays.
-
-Provides:
-- Relay: small wrapper for one relay pin (state caching, active_high toggle)
-- RelayManager: manage multiple Relay instances, safe GPIO init/cleanup
-
-Usage:
-    from relays import RelayManager
-    mgr = RelayManager()
-    mgr.add_relay(17, "fan", active_high=False)
-    mgr.set("fan", True)
-
-Async usage (safe from async code):
-    await mgr.async_set("fan", True)
-
-The module uses RPi.GPIO if available; otherwise a dummy implementation
-is used so code runs on non-RPi machines for development.
-"""
-
 from __future__ import annotations
 
 import asyncio
+import aiorwlock
 import logging
 import os
 from typing import Dict, Optional, Union
-
-# Try to import real RPi.GPIO; provide a dummy if unavailable for dev/testing
-try:
-    import RPi.GPIO as GPIO  # type: ignore
-
-    _HAS_GPIO = True
-except Exception:
-    _HAS_GPIO = False
-
-
-class _DummyGPIO:
-    BCM = "BCM"
-    OUT = "OUT"
-
-    def __init__(self):
-        self._pin_state = {}
-
-    def setmode(self, mode):
-        logging.debug("DummyGPIO: setmode(%s)", mode)
-
-    def setup(self, pin, mode, initial=False):
-        logging.debug("DummyGPIO: setup pin=%s mode=%s initial=%s", pin, mode, initial)
-        self._pin_state[pin] = bool(initial)
-
-    def output(self, pin, value):
-        logging.debug("DummyGPIO: output pin=%s value=%s", pin, value)
-        self._pin_state[pin] = bool(value)
-
-    def input(self, pin):
-        return self._pin_state.get(pin, False)
-
-    def cleanup(self):
-        logging.debug("DummyGPIO: cleanup")
-        self._pin_state.clear()
-
-
-GPIO = GPIO if _HAS_GPIO else _DummyGPIO()
+import RPi.GPIO as GPIO
 
 
 class Relay:
@@ -79,133 +25,107 @@ class Relay:
         self.name = name or f"relay_{pin}"
         self.active_high = active_high
         self.state = bool(initial)
-        self.lock = asyncio.Lock()
+        self.lock = aiorwlock.RWLock()
+
+        GPIO.setup(self.pin, GPIO.OUT, initial=self._to_hardware_state(self.state))
+        self.set(self.state)
 
         # Hardware setup
         # Ensure GPIO is configured by caller/manager; setup call here is idempotent
-        GPIO.setup(self.pin, GPIO.OUT, initial=self._to_hw(self.state))
 
-    def _to_hw(self, logical_state: bool) -> bool:
+    def _to_hardware_state(self, logical_state: bool) -> bool:
         """Convert logical ON/OFF to hardware level considering active_high."""
         return bool(logical_state) if self.active_high else (not bool(logical_state))
 
     def set(self, on: bool) -> None:
         """Set relay synchronously and update cached state."""
-        hw = self._to_hw(on)
-        GPIO.output(self.pin, hw)
+        state = self._to_hardware_state(on)
+        GPIO.output(self.pin, state)
         self.state = bool(on)
         logging.debug(
-            "Set relay %s(pin=%s) -> %s (hw=%s)", self.name, self.pin, self.state, hw
+            "Set relay %s(pin=%s) -> %s (state=%s)",
+            self.name,
+            self.pin,
+            self.state,
+            state,
         )
 
     async def async_set(self, on: bool) -> None:
         """Async wrapper that runs the blocking GPIO call in the default executor."""
         loop = asyncio.get_running_loop()
-        async with self.lock:
+        async with self.lock.writer_lock:
             await loop.run_in_executor(None, self.set, on)
 
-    def toggle(self) -> None:
-        self.set(not self.state)
-
-    async def async_toggle(self) -> None:
-        await self.async_set(not self.state)
-
-    def get(self) -> bool:
+    async def get(self) -> dict[str, any]:
         """Return cached state. Note: does not query hardware."""
-        return self.state
+        async with self.lock.reader_lock:
+            return {
+                "pin": self.pin,
+                "name": self.name,
+                "active_high": self.active_high,
+                "state": self.state,
+            }
 
 
 class RelayManager:
     """Manage multiple relays and GPIO lifecycle."""
 
-    def __init__(self, gpio_mode: Optional[str] = None):
+    def __init__(self, cache: dict, cache_lock: aiorwlock.RWLock):
         """Create manager. gpio_mode: ignored for dummy GPIO; for RPi use 'BCM' or 'BOARD'."""
-        self.relays: Dict[str, Relay] = {}
-        self._initialized = False
-        self._gpio_mode = gpio_mode or os.getenv("GPIO_MODE", "BCM")
-        self._init_gpio()
+        self.cache = cache
+        self.cache_lock = cache_lock
 
-    def _init_gpio(self):
-        if not self._initialized:
-            # For real RPi.GPIO use constants; for dummy it will accept the value
-            try:
-                if _HAS_GPIO:
-                    if self._gpio_mode == "BCM":
-                        GPIO.setmode(GPIO.BCM)
-                    else:
-                        GPIO.setmode(GPIO.BOARD)
-                else:
-                    GPIO.setmode(self._gpio_mode)
-                self._initialized = True
-                logging.debug("GPIO initialized mode=%s", self._gpio_mode)
-            except Exception as e:
-                logging.exception("Failed to initialize GPIO: %s", e)
+        # To make things easier we only support BCM mode
+        # This means we use the pin GPIO id, not the number of the pin on the boards.
+        GPIO.setmode(GPIO.BCM)
+        self.relays: Dict[str, Relay] = {}
 
     def add_relay(
         self,
+        id: str,
         pin: int,
         name: Optional[str] = None,
         active_high: bool = True,
         initial: bool = False,
-    ) -> Relay:
-        key = name or str(pin)
-        if key in self.relays:
-            raise KeyError(f"Relay with key '{key}' already exists")
-        relay = Relay(pin=pin, name=key, active_high=active_high, initial=initial)
-        self.relays[key] = relay
-        logging.info("Added relay %s on pin %s (active_high=%s)", key, pin, active_high)
-        return relay
+    ):
+        self.relays[id] = Relay(
+            pin=pin, name=name, active_high=active_high, initial=initial
+        )
+        logging.info(
+            "Added relay %s on pin %s (active_high=%s)", name, pin, active_high
+        )
 
-    def set(self, key_or_pin: Union[str, int], on: bool) -> None:
-        key = str(key_or_pin)
-        if key not in self.relays:
-            # try pin lookup
-            for r in self.relays.values():
-                if r.pin == int(key_or_pin):
-                    r.set(on)
-                    return
-            raise KeyError(f"Relay {key_or_pin} not found")
-        self.relays[key].set(on)
+    def set(self, id: str, on: bool) -> None:
+        self.relays[id].set(on)
+        self.update_cache()
 
-    async def async_set(self, key_or_pin: Union[str, int], on: bool) -> None:
-        key = str(key_or_pin)
-        if key in self.relays:
-            await self.relays[key].async_set(on)
-            return
-        for r in self.relays.values():
-            if r.pin == int(key_or_pin):
-                await r.async_set(on)
-                return
-        raise KeyError(f"Relay {key_or_pin} not found")
+    async def async_set(self, id: str, on: bool) -> None:
+        await self.relays[id].async_set(on)
+        await self.update_cache()
 
-    def get(self, key_or_pin: Union[str, int]) -> bool:
-        key = str(key_or_pin)
-        if key in self.relays:
-            return self.relays[key].get()
-        for r in self.relays.values():
-            if r.pin == int(key_or_pin):
-                return r.get()
-        raise KeyError(f"Relay {key_or_pin} not found")
-
-    def toggle(self, key_or_pin: Union[str, int]) -> None:
-        key = str(key_or_pin)
-        if key in self.relays:
-            self.relays[key].toggle()
-            return
-        for r in self.relays.values():
-            if r.pin == int(key_or_pin):
-                r.toggle()
-                return
-        raise KeyError(f"Relay {key_or_pin} not found")
-
-    async def async_toggle(self, key_or_pin: Union[str, int]) -> None:
-        await self.async_set(key_or_pin, not self.get(key_or_pin))
+    async def valid_relay_id(self, id: str) -> bool:
+        return True if id in self.relays.keys() else False
 
     def list_relays(self) -> Dict[str, Dict]:
         return {
-            k: {"pin": v.pin, "state": v.state, "active_high": v.active_high}
+            k: {"pin": v.pin, "state": v.state, "name": v.name}
             for k, v in self.relays.items()
         }
+
+    async def update_cache(self):
+        async with self.cache_lock.writer_lock:
+            self.cache.clear()
+            for rid, relay in self.relays.items():
+                self.cache[rid] = await relay.get()
+
+    async def update_cache_worker(self):
+        """Update cache worker is used to make it feel like one of the mangers.
+        I'm not yet convinced that I need it, although I will leave it here for now.
+        We already update the cache on every state change, so we don't need this really.
+        """
+        while True:
+            await self.update_cache()
+            await asyncio.sleep(5)
 
     def cleanup(self):
         try:
@@ -221,52 +141,54 @@ if __name__ == "__main__":
     async def main():
         log_level = os.getenv("LOG_LEVEL", "INFO").upper()
         logging.basicConfig(level=getattr(logging, log_level))
+        cache = {}
+        cache_lock = aiorwlock.RWLock()
 
-        mgr = RelayManager()
+        mgr = RelayManager(cache, cache_lock)
         # Example pins; change to your wiring
-        mgr.add_relay(18, "r1_1", active_high=False, initial=False)
-        mgr.add_relay(23, "r1_2", active_high=False, initial=False)
-        mgr.add_relay(24, "r1_3", active_high=False, initial=False)
-        mgr.add_relay(25, "r1_4", active_high=False, initial=False)
-        mgr.add_relay(12, "r2_1", active_high=False, initial=False)
-        mgr.add_relay(16, "r2_2", active_high=False, initial=False)
-        mgr.add_relay(20, "r2_3", active_high=False, initial=False)
-        mgr.add_relay(21, "r2_4", active_high=False, initial=False)
+        mgr.add_relay("plug1", 18, "r1_1", active_high=False, initial=False)
+        mgr.add_relay("plug2", 23, "r1_2", active_high=False, initial=False)
+        mgr.add_relay("plug3", 24, "r1_3", active_high=False, initial=False)
+        mgr.add_relay("plug4", 25, "r1_4", active_high=False, initial=False)
+        mgr.add_relay("plug5", 12, "r2_1", active_high=False, initial=False)
+        mgr.add_relay("plug6", 16, "r2_2", active_high=False, initial=False)
+        mgr.add_relay("plug7", 20, "r2_3", active_high=False, initial=False)
+        mgr.add_relay("plug8", 21, "r2_4", active_high=False, initial=False)
 
         # Turn pump on for 2s, then off
-        await mgr.async_set("r1_1", True)
+        await mgr.async_set("plug1", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_2", True)
+        await mgr.async_set("plug2", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_3", True)
+        await mgr.async_set("plug3", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_4", True)
+        await mgr.async_set("plug4", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_1", True)
+        await mgr.async_set("plug5", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_2", True)
+        await mgr.async_set("plug6", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_3", True)
+        await mgr.async_set("plug7", True)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_4", True)
+        await mgr.async_set("plug8", True)
 
         await asyncio.sleep(2)
 
-        await mgr.async_set("r1_1", False)
+        await mgr.async_set("plug1", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_2", False)
+        await mgr.async_set("plug2", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_3", False)
+        await mgr.async_set("plug3", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r1_4", False)
+        await mgr.async_set("plug4", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_1", False)
+        await mgr.async_set("plug5", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_2", False)
+        await mgr.async_set("plug6", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_3", False)
+        await mgr.async_set("plug7", False)
         await asyncio.sleep(1)
-        await mgr.async_set("r2_4", False)
+        await mgr.async_set("plug8", False)
 
         logging.info("States: %s", mgr.list_relays())
         mgr.cleanup()
